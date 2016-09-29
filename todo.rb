@@ -8,6 +8,10 @@ configure do
 	set :session_secret, 'secret'
 end 
 
+configure do
+  set :erb, :escape_html => true
+end
+
 before do 
 	session[:lists] ||= []
 end 
@@ -105,8 +109,12 @@ end
 get "/lists/:id" do 
 	@list_id = params[:id].to_i
 	@list = session[:lists][@list_id]
-
+	if @list_id > session[:lists].size
+		session[:success] = "The list does not exits"
+		redirect "/lists"
+	else 
 	erb :list, layout: :layout 
+	end 
 end 
 
 # edit the todo list 
@@ -140,11 +148,20 @@ post "/lists/:id/destroy" do
 
 	id = params[:id].to_i 
 	session[:lists].delete_at(id)
-	session[:success] = "The list has been deleted"
-	redirect "/lists"
+	if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
+		"/lists"
+	else 
+		session[:success] = "The list has been deleted"
+		redirect "/lists"
+	end 
 end 
 
-#add new todo
+def next_todo_id(todos)
+	max = todos.map{ |todo| todo[:id]}.max || 0
+	max + 1 
+end 
+
+#add a new todo
 post "/lists/:list_id/todos" do 
 	@list_id = params[:list_id].to_i 
 	@list = session[:lists][@list_id]
@@ -155,7 +172,8 @@ post "/lists/:list_id/todos" do
 		session[:error] = error 
 		erb :list, layout: :layout
 	else 
-		@list[:todos] << {name: text, completed: false}
+		id = next_todo_id(@list[:todos]) # refine this later
+		@list[:todos] << {id: id, name: text, completed: false}
 		session[:success] = "The todo has been created"
 		redirect "/lists/#{@list_id}"
 	end 
@@ -168,8 +186,12 @@ post "/lists/:id/:index/destroy" do
 	index = params[:index].to_i
 
 	todos.delete_at(index)
-	session[:success] = "The todo has been deleted"
-	redirect "/lists/#{id}"
+	if env["HTTP_X_REQUESTED_WITH"] == "XMLHttpRequest"
+		status 204
+	else 
+		session[:success] = "The todo has been deleted"
+		redirect "/lists/#{id}"
+	end 
 end 
 
 # mark completed todo
